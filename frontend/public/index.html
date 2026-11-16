@@ -23,7 +23,6 @@
         -->
         <title>كليشة | متجر العناية بالبشرة والعطور</title>
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
-        <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
     </head>
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>
@@ -39,6 +38,15 @@
       To create a production bundle, use `npm run build` or `yarn build`.
     -->
         <script>
+            // Analytics load only after the visitor accepts cookies (see CookieConsent in App.js)
+            window.__loadAnalytics = function () {
+                if (window.__analyticsLoaded) return;
+                window.__analyticsLoaded = true;
+                var em = document.createElement("script");
+                em.src = "https://assets.emergent.sh/scripts/emergent-main.js";
+                em.async = true;
+                document.head.appendChild(em);
+
             !(function (t, e) {
                 var o, n, p, r;
                 e.__SV ||
@@ -108,6 +116,10 @@
                     capturePerformance: false,
                 },
             });
+            };
+            try {
+                if (localStorage.getItem("cookie_consent") === "accepted") window.__loadAnalytics();
+            } catch (e) {}
         </script>
     </body>
 </html>
