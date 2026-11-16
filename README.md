@@ -1,149 +1,59 @@
-# 🌸 Ayman Ph - متجر العناية بالبشرة الإلكتروني
+# 🌸 كليشة (Ayman Ph) — متجر العناية بالبشرة
 
-> متجر عراقي إلكتروني للعناية بالبشرة والخدمات الرقمية، يستقبل الطلبات عبر واتساب.
+متجر عراقي بواجهة عربية RTL يستقبل الطلبات عبر واتساب.
 
-🌐 **الموقع المباشر:** https://aymanph.shop
+- 🌐 **الموقع:** https://axx6090-hub.github.io/Ph/
+- 🔐 **لوحة الأدمن:** https://axx6090-hub.github.io/Ph/#/admin
 
----
+## كيف يشتغل
 
-## ✨ المميزات
+الموقع ثابت (React) ومنشور على GitHub Pages. ما في سيرفر ولا قاعدة بيانات:
 
-- 🛍️ واجهة عربية RTL كاملة
-- 📱 متجاوب مع كل الأجهزة (موبايل، تابلت، كمبيوتر)
-- 🛒 سلة شراء ذكية
-- ❤️ قائمة رغبات (Wishlist)
-- 🔍 بحث وتصفية المنتجات
-- 💬 إتمام الطلب عبر واتساب مباشرة
-- 🚚 رسوم توصيل ثابتة 5,000 د.ع لكافة المحافظات
-- 🎁 توصيل مجاني للمنتجات الرقمية
-
----
-
-## 🛠️ التقنيات المستخدمة
-
-| الطبقة | التقنية |
+| الشي | مكانه |
 |---|---|
-| Frontend | React 19, React Router, Tailwind CSS, Axios, Lucide Icons |
-| Backend | FastAPI, Python 3.11+, Motor (Async MongoDB) |
-| Database | MongoDB |
-| Fonts | Tajawal, Cairo (Arabic Google Fonts) |
-| Deployment | Emergent Platform / Kubernetes |
+| المنتجات والأقسام | `frontend/src/staticData.json` |
+| صور المنتجات | `frontend/public/images/products/` |
+| واجهة المتجر | `frontend/src/App.js` |
+| لوحة الأدمن | `frontend/src/admin/` |
+| النشر التلقائي | `.github/workflows/deploy-pages.yml` |
 
----
+أي تعديل ينرفع على فرع `main` يبني الموقع وينشره تلقائياً خلال دقيقتين تقريباً.
 
-## 🚀 التشغيل المحلي
+> مجلد `backend/` من النسخة القديمة (FastAPI + MongoDB) وغير مستخدم في الموقع المنشور.
 
-### المتطلبات
-- Node.js 18+ و Yarn
-- Python 3.11+
-- MongoDB (محلي أو Atlas)
+## لوحة الأدمن
 
-### الخطوات
+- إضافة / تعديل / حذف المنتجات، وإضافة وحذف الأقسام.
+- **إضافة منتج بالذكاء الاصطناعي:** ترفع صورة المنتج، فتنشال الخلفية وتصير بيضاء، وتنقرأ العلبة لكتابة الاسم بالعربي والإنجليزي والوصف. الأدمن يكتب السعر فقط.
+- زر «نشر التغييرات» يحفظ كل شي في هذا المستودع.
+
+### الإعداد (مرة وحدة)
+
+1. **رمز GitHub للدخول:** من [صفحة إنشاء الرمز](https://github.com/settings/personal-access-tokens/new) اختر
+   Only select repositories ← `Ph`، ثم Repository permissions ← **Contents: Read and write**.
+2. **مفتاح Claude API** (اختياري، لقراءة الاسم والوصف من الصورة): يضاف من تبويب «الإعدادات» في اللوحة.
+   بدون المفتاح يشتغل شيل الخلفية فقط.
+
+الرمز والمفتاح ينحفظون في متصفح الأدمن فقط، وما ينكتبون في الكود أبداً.
+
+## تخصيص سريع
+
+في `frontend/src/App.js`:
+
+```js
+const WHATSAPP_NUMBER = "9647832882348"; // رقم استقبال الطلبات
+const DELIVERY_FEE = 5000;               // رسوم التوصيل
+```
+
+## التشغيل المحلي
 
 ```bash
-# 1) فك ضغط المشروع
-cd ayman-ph-website
-
-# 2) إعداد الباك إند
-cd backend
-pip install -r requirements.txt
-# عدّل .env بمعلومات قاعدة بياناتك:
-# MONGO_URL=mongodb://localhost:27017
-# DB_NAME=ayman_ph
-# CORS_ORIGINS=*
-
-# تشغيل الباك إند
-uvicorn server:app --reload --host 0.0.0.0 --port 8001
-
-# 3) في تيرمينال ثاني - إعداد الفرونت إند
-cd ../frontend
+cd frontend
 yarn install
-# عدّل .env:
-# REACT_APP_BACKEND_URL=http://localhost:8001
-
-yarn start
+yarn start      # http://localhost:3000
+yarn build      # نسخة الإنتاج في frontend/build
 ```
 
-الموقع يفتح على: http://localhost:3000
+## الترخيص
 
----
-
-## 📁 هيكل المشروع
-
-```
-ayman-ph-website/
-├── backend/
-│   ├── server.py          # كل الباك إند (API + Seed Data)
-│   ├── requirements.txt
-│   └── .env
-├── frontend/
-│   ├── src/
-│   │   ├── App.js         # كل الفرونت إند (Header, Cart, Checkout, ...)
-│   │   ├── index.css
-│   │   └── App.css
-│   ├── public/index.html
-│   ├── package.json
-│   └── .env
-├── AI_INSTRUCTIONS.md     # ⭐ دليل للذكاء الاصطناعي
-└── README.md              # هذا الملف
-```
-
----
-
-## 🛍️ كيف أضيف منتج جديد؟
-
-**اقرأ ملف [`AI_INSTRUCTIONS.md`](./AI_INSTRUCTIONS.md)** للتفاصيل الكاملة. ملخص:
-
-1. افتح `backend/server.py`
-2. ابحث عن `SEED_PRODUCTS = [`
-3. أضف منتجك:
-```python
-{
-    "id": "unique-id",
-    "name": "اسم المنتج",
-    "description": "الوصف",
-    "price": 15000,
-    "sale_price": 19000,
-    "image": "https://link-to-image.png",
-    "category": "offers",  # أو "best-selling"
-    "skin_type": ["normal", "dry"],
-    "brand": "اسم العلامة",
-    "badge": "-21%",
-    "free_delivery": False,
-}
-```
-4. أعد تشغيل الباك إند: `sudo supervisorctl restart backend`
-
----
-
-## 🔧 تخصيص الموقع
-
-### تغيير رقم الواتساب
-في `frontend/src/App.js`:
-```js
-const WHATSAPP_NUMBER = "9647832882348";
-```
-
-### تغيير رسوم التوصيل
-في `frontend/src/App.js`:
-```js
-const DELIVERY_FEE = 5000;
-```
-
-### تغيير اسم المتجر
-ابحث عن "Ayman Ph" في:
-- `frontend/src/App.js` (5 مواقع)
-- `frontend/public/index.html` (title + description)
-
----
-
-## 📞 المعلومات
-
-- 📱 **واتساب:** +964 783 288 2348
-- 🌐 **الموقع:** https://aymanph.shop
-
----
-
-## 📄 الترخيص
-
-كود مفتوح للاستخدام الشخصي. صنع بحب 💕
+مكتبة إزالة الخلفية `@imgly/background-removal` مرخصة AGPL-3.0، لذلك لازم كود الموقع يبقى متاحاً للعامة ما دامت مستخدمة.
