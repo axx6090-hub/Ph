@@ -1,9 +1,11 @@
-import React, { useEffect, useState, createContext, useContext, useMemo } from "react";
+import React, { useEffect, useState, createContext, useContext, useMemo, Suspense, lazy } from "react";
 import { HashRouter, Routes, Route, Link, useParams, useNavigate, useLocation } from "react-router-dom";
 import axios from "./localAxios";
 import staticData from "./staticData.json";
 import { ShoppingBag, Heart, Search, Menu, X, ChevronLeft, Plus, Minus, Trash2, MessageCircle, Truck, ShieldCheck, Sparkles, Phone, MapPin, Instagram, Facebook } from "lucide-react";
 import "@/App.css";
+
+const Admin = lazy(() => import("./admin/Admin"));
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -51,18 +53,46 @@ const getSocialProof = (productId) => {
   return { qty, hours };
 };
 
+// ============== COOKIES / SAVED PREFERENCES ==============
+// After the visitor accepts cookies we remember the cart, the delivery details and the
+// recently viewed products on this device, so the next visit is faster.
+const COOKIE_KEY = "cookie_consent";
+const hasConsent = () => {
+  try { return localStorage.getItem(COOKIE_KEY) === "accepted"; } catch (e) { return false; }
+};
+const readJson = (storage, key, fallback) => {
+  try { const v = JSON.parse(storage.getItem(key)); return v ?? fallback; } catch (e) { return fallback; }
+};
+const writeJson = (storage, key, value) => {
+  try { storage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage unavailable */ }
+};
+const loadCart = () => {
+  const session = readJson(sessionStorage, "bp_cart", null);
+  if (Array.isArray(session) && session.length) return session;
+  const saved = hasConsent() ? readJson(localStorage, "bp_cart", []) : [];
+  return Array.isArray(saved) ? saved : [];
+};
+const saveCart = (items) => {
+  writeJson(sessionStorage, "bp_cart", items);
+  if (hasConsent()) writeJson(localStorage, "bp_cart", items);
+};
+const loadCustomer = () => (hasConsent() ? readJson(localStorage, "bp_customer", {}) : {});
+const saveCustomer = (info) => { if (hasConsent()) writeJson(localStorage, "bp_customer", info); };
+const loadRecent = () => {
+  const ids = hasConsent() ? readJson(localStorage, "bp_recent", []) : [];
+  return Array.isArray(ids) ? ids : [];
+};
+const pushRecent = (id) => {
+  if (!hasConsent()) return;
+  writeJson(localStorage, "bp_recent", [id, ...loadRecent().filter((x) => x !== id)].slice(0, 10));
+};
+
 // ============== CART CONTEXT ==============
 const CartContext = createContext(null);
 const useCart = () => useContext(CartContext);
 
 const CartProvider = ({ children }) => {
-  const [items, setItems] = useState(() => {
-    try {
-      return JSON.parse(sessionStorage.getItem("bp_cart") || "[]");
-    } catch {
-      return [];
-    }
-  });
+  const [items, setItems] = useState(loadCart);
   const [wishlist, setWishlist] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("bp_wishlist") || "[]");
@@ -73,7 +103,11 @@ const CartProvider = ({ children }) => {
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   useEffect(() => {
-    try { sessionStorage.setItem("bp_cart", JSON.stringify(items)); } catch (e) { /* storage unavailable */ }
+    saveCart(items);
+    // once cookies are accepted, keep the current cart for the next visit too
+    const onConsent = () => saveCart(items);
+    window.addEventListener("cookie-consent", onConsent);
+    return () => window.removeEventListener("cookie-consent", onConsent);
   }, [items]);
   useEffect(() => {
     try { localStorage.setItem("bp_wishlist", JSON.stringify(wishlist)); } catch (e) { /* storage unavailable */ }
@@ -466,6 +500,20 @@ const ProductSection = ({ title, emoji, category, viewAllLink }) => {
   );
 };
 
+// ============== RECENTLY VIEWED (needs cookie consent) ==============
+const RecentlyViewed = () => {
+  const [products] = useState(() => loadRecent().map((id) => staticData.products.find((p) => p.id === id)).filter(Boolean).slice(0, 5));
+  if (products.length === 0) return null;
+  return (
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10" data-testid="recently-viewed">
+      <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-6">شفتيها مؤخراً <span className="text-pink-500">👀</span></h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-5">
+        {products.map((p) => <ProductCard key={p.id} product={p} />)}
+      </div>
+    </section>
+  );
+};
+
 // ============== CATEGORIES SECTION ==============
 const CategoriesSection = () => {
   const [cats, setCats] = useState(staticData.categories);
@@ -549,10 +597,10 @@ const Home = () => {
       <ProductSection title="الأكثر طلباً" emoji="⭐" category="best-selling" viewAllLink="/collection/best-selling" />
       <CategoriesSection />
       <ProductSection title="عرض حصري" emoji="💎" category="offers" viewAllLink="/collection/offers" />
-      <ProductSection title="مرطبات" emoji="🧴" category="moisturizer" viewAllLink="/collection/category-moisturizer" />
-      <ProductSection title="فازلين" emoji="💙" category="vaseline" viewAllLink="/collection/category-vaseline" />
-      <ProductSection title="واقي شمس" emoji="☀️" category="sunscreen" viewAllLink="/collection/category-sunscreen" />
-      <ProductSection title="سيروم" emoji="💧" category="serum" viewAllLink="/collection/category-serum" />
+      {staticData.categories.filter((c) => c.home).map((c) => (
+        <ProductSection key={c.id} title={c.name} emoji={c.emoji} category={c.id} viewAllLink={`/collection/category-${c.slug}`} />
+      ))}
+      <RecentlyViewed />
     </>
   );
 };
@@ -648,6 +696,7 @@ const ProductDetail = () => {
     axios.get(`${API}/products/${id}`)
       .then((r) => {
         setProduct(r.data);
+        pushRecent(r.data.id);
         axios.get(`${API}/products?category=${r.data.category}&limit=10`).then((res) => setRelated(res.data.filter((p) => p.id !== id)));
       })
       .catch(() => navigate("/"));
@@ -784,7 +833,7 @@ const WishlistPage = () => {
 const Checkout = () => {
   const { items, totalPrice, clearCart, deliveryFee } = useCart();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", phone: "", city: "", address: "", notes: "" });
+  const [form, setForm] = useState(() => ({ name: "", phone: "", city: "", address: "", ...loadCustomer(), notes: "" }));
   const [sent, setSent] = useState(false);
   const [orderUrl, setOrderUrl] = useState("");
   const [phoneError, setPhoneError] = useState("");
@@ -831,6 +880,7 @@ const Checkout = () => {
       "شكراً لطلبكم 💕"
     ].filter(Boolean).join("\n");
 
+    saveCustomer({ name: form.name, phone, city: form.city, address: form.address });
     const url = buildWhatsAppUrl(lines);
     setOrderUrl(url);
     setSent(true);
@@ -982,21 +1032,21 @@ const FloatingWhatsApp = () => (
 );
 
 // ============== COOKIE CONSENT ==============
-const COOKIE_KEY = "cookie_consent";
 const CookieConsent = () => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     try {
-      if (!localStorage.getItem(COOKIE_KEY)) setVisible(true);
+      if (localStorage.getItem(COOKIE_KEY) !== "accepted") setVisible(true);
     } catch (e) {
       setVisible(true);
     }
   }, []);
 
-  const choose = (value) => {
-    try { localStorage.setItem(COOKIE_KEY, value); } catch (e) { /* storage unavailable */ }
-    if (value === "accepted" && typeof window.__loadAnalytics === "function") window.__loadAnalytics();
+  const accept = () => {
+    try { localStorage.setItem(COOKIE_KEY, "accepted"); } catch (e) { /* storage unavailable */ }
+    if (typeof window.__loadAnalytics === "function") window.__loadAnalytics();
+    window.dispatchEvent(new Event("cookie-consent"));
     setVisible(false);
   };
 
@@ -1007,12 +1057,9 @@ const CookieConsent = () => {
       <div className="max-w-3xl mx-auto bg-white border border-pink-100 shadow-2xl rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
         <div className="flex-1 text-sm text-gray-700 leading-relaxed">
           <p className="font-bold text-gray-900 mb-1">🍪 نستخدم ملفات تعريف الارتباط (الكوكيز)</p>
-          <p>نستخدمها لحفظ سلتج وقائمة رغباتج ولتحسين تجربتج في الموقع. بموافقتج تساعدينا نطوّر المتجر.</p>
+          <p>حتى نحفظ سلتج وبيانات التوصيل للطلب الجاي ونعرض لج المنتجات اللي شفتيها، ونحسّن تجربتج بالموقع.</p>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <button onClick={() => choose("accepted")} className="flex-1 sm:flex-none bg-pink-600 hover:bg-pink-700 text-white font-bold px-6 py-2.5 rounded-full transition" data-testid="cookie-accept">موافق</button>
-          <button onClick={() => choose("declined")} className="flex-1 sm:flex-none border border-gray-300 hover:border-gray-400 text-gray-700 font-semibold px-5 py-2.5 rounded-full transition" data-testid="cookie-decline">الضرورية فقط</button>
-        </div>
+        <button onClick={accept} className="shrink-0 w-full sm:w-auto bg-pink-600 hover:bg-pink-700 text-white font-bold px-8 py-2.5 rounded-full transition" data-testid="cookie-accept">موافق</button>
       </div>
     </div>
   );
@@ -1033,6 +1080,7 @@ function App() {
               <Route path="/search" element={<SearchPage />} />
               <Route path="/wishlist" element={<WishlistPage />} />
               <Route path="/checkout" element={<Checkout />} />
+              <Route path="/admin" element={<Suspense fallback={<div className="py-20 text-center text-gray-500">جاري التحميل...</div>}><Admin /></Suspense>} />
             </Routes>
           </main>
           <Footer />
