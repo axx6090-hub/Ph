@@ -8,9 +8,36 @@ import "@/App.css";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 const WHATSAPP_NUMBER = "9647832882348"; // 07832882348 with Iraq country code
+// Opens WhatsApp inside the user's tap (no timers), so popup blockers and in-app
+// browsers (Instagram / TikTok / Facebook) don't block it. Falls back to same-tab navigation.
+const buildWhatsAppUrl = (text) =>
+  `https://wa.me/${WHATSAPP_NUMBER}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
+const openWhatsApp = (url) => {
+  let win = null;
+  try { win = window.open(url, "_blank"); } catch (e) { win = null; }
+  if (!win || win.closed || typeof win.closed === "undefined") {
+    window.location.href = url;
+    return false;
+  }
+  try { win.opener = null; } catch (e) { /* cross-origin */ }
+  return true;
+};
 const DELIVERY_FEE = 5000; // د.ع - flat fee for all Iraqi governorates
 
 const formatPrice = (n) => Number(n).toLocaleString("en-US") + " د.ع";
+
+// Iraqi mobile numbers: 07XXXXXXXXX (also accepts +964 / 00964 and Arabic digits)
+const normalizeIraqiPhone = (value) => {
+  let v = String(value || "")
+    .replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d))
+    .replace(/[^\d+]/g, "");
+  if (v.startsWith("+964")) v = "0" + v.slice(4);
+  else if (v.startsWith("00964")) v = "0" + v.slice(5);
+  else if (v.startsWith("964")) v = "0" + v.slice(3);
+  if (/^7\d{9}$/.test(v)) v = "0" + v;
+  return v;
+};
+const isIraqiPhone = (value) => /^07[3-9]\d{8}$/.test(normalizeIraqiPhone(value));
 
 // Session-level seed: changes on every page load/refresh
 const SESSION_SEED = Math.floor(Math.random() * 100000) + Date.now();
@@ -46,10 +73,10 @@ const CartProvider = ({ children }) => {
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   useEffect(() => {
-    sessionStorage.setItem("bp_cart", JSON.stringify(items));
+    try { sessionStorage.setItem("bp_cart", JSON.stringify(items)); } catch (e) { /* storage unavailable */ }
   }, [items]);
   useEffect(() => {
-    localStorage.setItem("bp_wishlist", JSON.stringify(wishlist));
+    try { localStorage.setItem("bp_wishlist", JSON.stringify(wishlist)); } catch (e) { /* storage unavailable */ }
   }, [wishlist]);
 
   const addToCart = (product, qty = 1) => {
@@ -104,6 +131,11 @@ const Header = () => {
   const navLinks = [
     { name: "العروض", to: "/collection/offers" },
     { name: "الأكثر طلباً", to: "/collection/best-selling" },
+    { name: "مرطبات", to: "/collection/category-moisturizer" },
+    { name: "فازلين", to: "/collection/category-vaseline" },
+    { name: "واقي شمس", to: "/collection/category-sunscreen" },
+    { name: "سيروم", to: "/collection/category-serum" },
+    { name: "غسول", to: "/collection/category-cleansers" },
   ];
 
   return (
@@ -205,6 +237,11 @@ const Header = () => {
 const CartDrawer = () => {
   const { items, isCartOpen, setIsCartOpen, removeFromCart, updateQty, totalPrice, deliveryFee } = useCart();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    setIsCartOpen(false);
+  }, [pathname, setIsCartOpen]);
 
   if (!isCartOpen) return null;
 
@@ -439,11 +476,15 @@ const CategoriesSection = () => {
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-6">اختاري روتينج</h2>
-      <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-8 gap-3">
+      <div className="grid grid-cols-3 md:grid-cols-9 gap-3">
         {cats.map((c) => (
           <Link key={c.id} to={`/collection/category-${c.slug}`} className="group text-center" data-testid={`category-${c.slug}`}>
             <div className="aspect-square bg-gradient-to-br from-pink-50 to-rose-100 rounded-2xl overflow-hidden mb-2 group-hover:shadow-lg transition">
-              <img src={c.image} alt={c.name} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
+              {c.emoji ? (
+                <span className="w-full h-full flex items-center justify-center text-4xl sm:text-5xl group-hover:scale-110 transition-transform" aria-hidden="true">{c.emoji}</span>
+              ) : (
+                <img src={c.image} alt={c.name} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
+              )}
             </div>
             <p className="text-xs sm:text-sm font-semibold text-gray-700 group-hover:text-pink-600">{c.name}</p>
           </Link>
@@ -506,7 +547,12 @@ const Home = () => {
   return (
     <>
       <ProductSection title="الأكثر طلباً" emoji="⭐" category="best-selling" viewAllLink="/collection/best-selling" />
+      <CategoriesSection />
       <ProductSection title="عرض حصري" emoji="💎" category="offers" viewAllLink="/collection/offers" />
+      <ProductSection title="مرطبات" emoji="🧴" category="moisturizer" viewAllLink="/collection/category-moisturizer" />
+      <ProductSection title="فازلين" emoji="💙" category="vaseline" viewAllLink="/collection/category-vaseline" />
+      <ProductSection title="واقي شمس" emoji="☀️" category="sunscreen" viewAllLink="/collection/category-sunscreen" />
+      <ProductSection title="سيروم" emoji="💧" category="serum" viewAllLink="/collection/category-serum" />
     </>
   );
 };
@@ -538,7 +584,12 @@ const Collection = () => {
     axios.get(url).then((r) => { setProducts(r.data); setLoading(false); }).catch(() => setLoading(false));
   }, [slug]);
 
-  const title = titles[slug] || "المنتجات";
+  const categoryName = slug.startsWith("category-")
+    ? (staticData.categories.find((c) => c.slug === slug.replace("category-", "")) || {}).name
+    : slug.startsWith("skin-")
+      ? (staticData.skinTypes.find((t) => t.id === slug.replace("skin-", "")) || {}).name
+      : null;
+  const title = titles[slug] || categoryName || "المنتجات";
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -735,11 +786,21 @@ const Checkout = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", phone: "", city: "", address: "", notes: "" });
   const [sent, setSent] = useState(false);
+  const [orderUrl, setOrderUrl] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const isKidsVideoOnly = items.length > 0 && items.every((item) => item.id === "kids-video-design");
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (items.length === 0) return;
+
+    const phoneRequired = !isKidsVideoOnly;
+    if ((phoneRequired || form.phone.trim()) && !isIraqiPhone(form.phone)) {
+      setPhoneError("أدخلي رقم هاتف عراقي صحيح مكوّن من 11 رقم، مثل 07701234567");
+      return;
+    }
+    setPhoneError("");
+    const phone = form.phone.trim() ? normalizeIraqiPhone(form.phone) : "";
 
     const grandTotal = totalPrice + deliveryFee;
     const deliveryLine = deliveryFee === 0
@@ -751,7 +812,7 @@ const Checkout = () => {
       "",
       "👤 بيانات الزبونة",
       `• الاسم: ${form.name || "غير مذكور"}`,
-      `• الهاتف: ${form.phone || "غير مذكور"}`,
+      `• الهاتف: ${phone || "غير مذكور"}`,
       `• المحافظة: ${form.city || "غير مذكور"}`,
       `• العنوان: ${form.address || "غير مذكور"}`,
       form.notes ? `• ملاحظات: ${form.notes}` : null,
@@ -770,16 +831,36 @@ const Checkout = () => {
       "شكراً لطلبكم 💕"
     ].filter(Boolean).join("\n");
 
-    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(lines)}`;
+    const url = buildWhatsAppUrl(lines);
+    setOrderUrl(url);
     setSent(true);
-    setTimeout(() => {
-      window.open(url, "_blank");
-      clearCart();
-      navigate("/");
-    }, 600);
+    clearCart();
+    window.scrollTo(0, 0);
+    openWhatsApp(url);
   };
 
-  if (items.length === 0 && !sent) {
+  if (sent) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-16 text-center" data-testid="order-sent">
+        <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-green-100 flex items-center justify-center">
+          <MessageCircle size={38} className="text-[#25d366]" />
+        </div>
+        <h1 className="text-2xl font-extrabold text-gray-900 mb-3">طلبج جاهز للإرسال ✅</h1>
+        <p className="text-gray-600 leading-relaxed mb-7">
+          فتحنالج واتساب ورسالة الطلب مكتوبة، بس اضغطي «إرسال» حتى يوصلنا.
+          <br />إذا ما انفتح واتساب تلقائياً اضغطي الزر التالي.
+        </p>
+        <a href={orderUrl} target="_blank" rel="noopener noreferrer" className="w-full bg-[#25d366] hover:bg-green-600 text-white py-4 rounded-full font-bold text-lg flex items-center justify-center gap-2 transition mb-3" data-testid="order-open-whatsapp">
+          <MessageCircle size={22} /> فتح واتساب وإرسال الطلب
+        </a>
+        <button onClick={() => navigate("/")} className="w-full border-2 border-pink-200 text-pink-600 hover:bg-pink-50 py-3.5 rounded-full font-bold transition" data-testid="order-back-home">
+          الرجوع للمتجر
+        </button>
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-20 text-center">
         <ShoppingBag size={60} className="text-pink-200 mx-auto mb-4" />
@@ -804,7 +885,11 @@ const Checkout = () => {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">رقم الهاتف {isKidsVideoOnly ? "(اختياري)" : "*"}</label>
-            <input required={!isKidsVideoOnly} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="07xxxxxxxxx" type="tel" className="w-full border-2 border-pink-100 focus:border-pink-400 outline-none rounded-xl px-4 py-3" data-testid="checkout-phone" />
+            <div className={`flex items-stretch border-2 rounded-xl overflow-hidden bg-white ${phoneError ? "border-red-400" : "border-pink-100 focus-within:border-pink-400"}`} dir="ltr">
+              <span className="flex items-center gap-1.5 px-3 bg-pink-50 text-gray-700 text-sm font-semibold border-r border-pink-100 select-none">🇮🇶 العراق</span>
+              <input required={!isKidsVideoOnly} value={form.phone} onChange={(e) => { setForm({ ...form, phone: e.target.value }); if (phoneError) setPhoneError(""); }} onBlur={() => { if (form.phone.trim() && !isIraqiPhone(form.phone)) setPhoneError("أدخلي رقم هاتف عراقي صحيح مكوّن من 11 رقم، مثل 07701234567"); }} placeholder="07701234567" type="tel" inputMode="tel" autoComplete="tel" maxLength={20} className="flex-1 min-w-0 outline-none px-4 py-3" data-testid="checkout-phone" />
+            </div>
+            {phoneError && <p className="text-red-500 text-xs mt-1.5" data-testid="checkout-phone-error">{phoneError}</p>}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">المحافظة {isKidsVideoOnly ? "(اختياري)" : "*"}</label>
@@ -825,7 +910,7 @@ const Checkout = () => {
           </div>
 
           <button type="submit" disabled={sent} className="w-full bg-[#25d366] hover:bg-green-600 disabled:opacity-60 text-white py-4 rounded-full font-bold text-lg flex items-center justify-center gap-2 transition" data-testid="submit-order">
-            <MessageCircle size={22} /> {sent ? "جاري التوجيه..." : "إرسال الطلب عبر واتساب"}
+            <MessageCircle size={22} /> إرسال الطلب عبر واتساب
           </button>
           <p className="text-center text-xs text-gray-500">سيتم تحويلج لواتساب لإكمال الطلب مع تأكيد التفاصيل</p>
         </form>
@@ -896,6 +981,43 @@ const FloatingWhatsApp = () => (
   </a>
 );
 
+// ============== COOKIE CONSENT ==============
+const COOKIE_KEY = "cookie_consent";
+const CookieConsent = () => {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(COOKIE_KEY)) setVisible(true);
+    } catch (e) {
+      setVisible(true);
+    }
+  }, []);
+
+  const choose = (value) => {
+    try { localStorage.setItem(COOKIE_KEY, value); } catch (e) { /* storage unavailable */ }
+    if (value === "accepted" && typeof window.__loadAnalytics === "function") window.__loadAnalytics();
+    setVisible(false);
+  };
+
+  if (!visible) return null;
+
+  return (
+    <div className="fixed bottom-0 inset-x-0 z-[60] p-3 sm:p-4" role="dialog" aria-live="polite" aria-label="ملفات تعريف الارتباط" data-testid="cookie-consent">
+      <div className="max-w-3xl mx-auto bg-white border border-pink-100 shadow-2xl rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
+        <div className="flex-1 text-sm text-gray-700 leading-relaxed">
+          <p className="font-bold text-gray-900 mb-1">🍪 نستخدم ملفات تعريف الارتباط (الكوكيز)</p>
+          <p>نستخدمها لحفظ سلتج وقائمة رغباتج ولتحسين تجربتج في الموقع. بموافقتج تساعدينا نطوّر المتجر.</p>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <button onClick={() => choose("accepted")} className="flex-1 sm:flex-none bg-pink-600 hover:bg-pink-700 text-white font-bold px-6 py-2.5 rounded-full transition" data-testid="cookie-accept">موافق</button>
+          <button onClick={() => choose("declined")} className="flex-1 sm:flex-none border border-gray-300 hover:border-gray-400 text-gray-700 font-semibold px-5 py-2.5 rounded-full transition" data-testid="cookie-decline">الضرورية فقط</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ============== APP ==============
 function App() {
   return (
@@ -916,6 +1038,7 @@ function App() {
           <Footer />
           <CartDrawer />
           <FloatingWhatsApp />
+          <CookieConsent />
         </div>
       </HashRouter>
     </CartProvider>
